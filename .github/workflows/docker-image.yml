@@ -1,0 +1,40 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+  - cron: '*/15 * * * *'
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build the Docker image
+      # run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      run: |
+        export GDN_MDC_CLI_CLIENT_ID=${{secrets.GDN_MDC_CLI_CLIENT_ID}}
+        export GDN_MDC_CLI_CLIENT_SECRET=${{secrets.GDN_MDC_CLI_CLIENT_SECRET}}
+        export GDN_MDC_CLI_TENANT_ID=${{secrets.GDN_MDC_CLI_TENANT_ID}}
+        export GDN_TRIVY_TARGET=${{vars.GDN_TRIVY_TARGET}}
+        export GDN_TRIVY_ACTION=${{vars.GDN_TRIVY_ACTION}}
+        export GDN_PIPELINE_ID=${{vars.GDN_PIPELINE_ID}}
+        export GDN_PIPELINE_URL=${{vars.GDN_PIPELINE_URL}}
+        echo ${{secrets.DOCKER_PASSWORD}} | docker login --username ${{secrets.DOCKER_USERNAME}} --password-stdin ${{secrets.DOCKER_REGISTRY}}
+        docker build -t ${{vars.IMAGE_NAME}} .
+        docker tag ${{vars.IMAGE_NAME}} ${{vars.GDN_TRIVY_TARGET}}:V${{github.run_number}}
+        docker tag ${{vars.IMAGE_NAME}} ${{vars.GDN_TRIVY_TARGET}}:latest
+        docker push --all-tags ${{vars.GDN_TRIVY_TARGET}}
+        unzip -o ./msdo-linux-x64.zip
+        chmod +x msdo-linux-x64/guardian
+        chmod +x msdo-linux-x64/Microsoft.Guardian.Cli
+        msdo-linux-x64/guardian init --force
+        msdo-linux-x64/guardian run -t trivy --export-file ./ubuntu-test.sarif --publish-file-folder-path ./ubuntu-test.sarif --not-break-on-detections
+        
+
